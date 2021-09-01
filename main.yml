@@ -1,0 +1,48 @@
+---
+
+- name: V-204425 - Password-less SSH Login
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Replace Empty Password Line in sshd_config
+      replace:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitEmptyPasswords .*$'
+        replace: 'PermitEmptyPasswords no'
+        backup: yes
+        validate: '/usr/bin/sshd -f %s -t'
+      register: sshd_replace
+
+    - name: Restart sshd if changed
+      service:
+        name: sshd
+        state: restarted
+      when: sshd_replace.changed
+
+- name: V-204424 - Accounts with Blank Passwords
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Check if PAM is allowing blank passwords
+      command: grep nullok /etc/pam.d/system-auth /etc/pam.d/password-auth
+      register: check_nullok
+      ignore_errors: yes
+      changed_when: check_nullok.rc == 0
+
+    - name: Remove nullok from pam.d system-auth
+      replace:
+        path: /etc/pam.d/system-auth
+        regex: 'nullok'
+        replace: ''
+        backup: yes
+      when: check_nullok.changed
+
+    - name: Remove nullok from pam.d password-auth
+      replace:
+        path: /etc/pam.d/password-auth
+        regex: 'nullok'
+        replace: ''
+        backup: yes
+      when: check_nullok.changed
